@@ -256,4 +256,69 @@ defmodule FileUtilsTest do
     assert FileUtils.lstat(link, time: :fantasy) == {:error, :badarg}
   end
 
+  test "that lstat!/2 returns information about a link", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    dir = Path.join(workdir, "dir")
+    link_file = Path.join(workdir, "link_file")
+    link_dir = Path.join(workdir, "link_dir")
+
+    File.write!(file, "")
+    File.ln_s(file, link_file)
+    File.mkdir!(dir)
+    File.ln_s(dir, link_dir)
+
+    {:ok, lstat} = FileUtils.lstat(link_file)
+    assert FileUtils.lstat!(link_file) == lstat
+
+    {:ok, lstat} = FileUtils.lstat(link_dir)
+    assert FileUtils.lstat!(link_dir) == lstat
+  end
+
+  test "that the time options for lstat!/2 work", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    link = Path.join(workdir, "link")
+
+    File.ln_s(file, link)
+
+    {:ok, %File.Stat{ctime: local_time}} = FileUtils.lstat(link, time: :local)
+    universal_time = :erlang.localtime_to_universaltime(local_time)
+    posix_time = :erlang.universaltime_to_posixtime(universal_time)
+
+    lstat = FileUtils.lstat!(link, time: :local)
+    assert lstat.ctime == local_time
+    assert lstat.mtime == local_time
+    assert lstat.atime == local_time
+
+    lstat = FileUtils.lstat!(link, time: :universal)
+    assert lstat.ctime == universal_time
+    assert lstat.mtime == universal_time
+    assert lstat.atime == universal_time
+
+    lstat = FileUtils.lstat!(link, time: :posix)
+    assert lstat.ctime == posix_time
+    assert lstat.mtime == posix_time
+    assert lstat.atime == posix_time
+  end
+
+  test "error conditions in lstat!/2", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    link = Path.join(workdir, "link")
+    missing = Path.join(workdir, "missing")
+
+    File.ln_s(file, link)
+
+    assert_raise File.Error, "could not read file stats #{missing}: no such file or directory", fn ->
+      FileUtils.lstat!(missing)
+    end
+    assert_raise File.Error, "could not read file stats #{link}: bad argument", fn ->
+      FileUtils.lstat!(link, time: :fantasy)
+    end
+  end
+
 end

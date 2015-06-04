@@ -123,4 +123,18 @@ defmodule FileUtils do
     {:ok, File.Stat.from_record(stat_record)}
   end
   defp lstat_rec_to_struct(error), do: error
+
+  @doc """
+  Same as `lstat/2`, but returns the `File.Stat` directly and throws
+  `File.Error` if an error is returned.
+  """
+  @spec lstat!(Path.t, [lstat_opt]) :: File.Stat.t | no_return
+  def lstat!(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    case FileUtils.lstat(path, opts) do
+      {:ok, info}      -> info
+      {:error, reason} ->
+        raise File.Error, reason: reason, action: "read file stats", path: path
+    end
+  end
+
 end
