@@ -1,6 +1,7 @@
 defmodule FileUtils do
 
   @type posix :: :file.posix
+  @type badarg :: {:error, :badarg}
 
   @doc """
   Create a tree of file / directory specifications under the given root. Each
@@ -93,4 +94,33 @@ defmodule FileUtils do
     error
   end
 
+  @doc """
+  Returns information about the path. If it exists, it returns a {:ok, info}
+  tuple, where info is a `File.Stat` struct. Returns {:error, reason} with a
+  `:file.posix` reason if a failure occurs.
+
+  This is exactly the same operation as `File.stat/2` except in the case where
+  the path is a symbolic link. In this circumstance `lstat/2` returns
+  information about the link, where `File.stat/2` returns information about the
+  file the link references.
+
+  ### Options
+
+  The accepted options are:
+
+  *  `:time` - `:local` | `:universal` | `:posix`; default: `:local`
+  """
+  @type lstat_opt :: {:time, (:local | :universal | :posix)}
+  @spec lstat(Path.t, [lstat_opt]) :: {:ok, File.Stat.t} | {:error, posix} | badarg
+  def lstat(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    opts = [
+      time: :local
+    ] |> Dict.merge(opts)
+    :file.read_link_info(path, opts) |> lstat_rec_to_struct
+  end
+
+  defp lstat_rec_to_struct({:ok, stat_record}) do
+    {:ok, File.Stat.from_record(stat_record)}
+  end
+  defp lstat_rec_to_struct(error), do: error
 end

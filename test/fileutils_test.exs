@@ -156,4 +156,104 @@ defmodule FileUtilsTest do
     ]) == {:error, :badarg, {"foo", -1, "bar"}}
   end
 
+  test "that lstat/2 gets information about files and directories", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    dir = Path.join(workdir, "dir")
+
+    File.write!(file, "")
+    File.mkdir!(dir)
+
+    assert FileUtils.lstat(file) == File.stat(file)
+    assert FileUtils.lstat(dir) == File.stat(dir)
+  end
+
+  test "that lstat/2 gets information about a link", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    dir = Path.join(workdir, "dir")
+    link_file = Path.join(workdir, "link_file")
+    link_dir = Path.join(workdir, "link_dir")
+
+    File.write!(file, "")
+    File.ln_s(file, link_file)
+    File.mkdir!(dir)
+    File.ln_s(dir, link_dir)
+
+    file_stat = File.stat!(file)
+    assert {:ok, lstat} = FileUtils.lstat(link_file)
+    assert lstat.size > 0
+    assert lstat.type == :symlink
+    assert lstat.access == file_stat.access
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.atime
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.mtime
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.ctime
+    assert lstat.mode > 0
+    assert lstat.links == 1
+    assert lstat.major_device == file_stat.major_device
+    assert lstat.minor_device == file_stat.minor_device
+    assert lstat.inode >= 0
+    assert lstat.uid == file_stat.uid
+    assert lstat.gid == file_stat.gid
+
+    dir_stat = File.stat!(dir)
+    assert {:ok, lstat} = FileUtils.lstat(link_dir)
+    assert lstat.size > 0
+    assert lstat.type == :symlink
+    assert lstat.access == dir_stat.access
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.atime
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.mtime
+    assert {{_y, _mon, _d}, {_h, _min, _s}} = lstat.ctime
+    assert lstat.mode > 0
+    assert lstat.links == 1
+    assert lstat.major_device == dir_stat.major_device
+    assert lstat.minor_device == dir_stat.minor_device
+    assert lstat.inode >= 0
+    assert lstat.uid == dir_stat.uid
+    assert lstat.gid == dir_stat.gid
+  end
+
+  test "that time options for lstat/2 work", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    link = Path.join(workdir, "link")
+
+    File.ln_s(file, link)
+
+    assert {:ok, %File.Stat{ctime: local_time}} = FileUtils.lstat(link, time: :local)
+    universal_time = :erlang.localtime_to_universaltime(local_time)
+    posix_time = :erlang.universaltime_to_posixtime(universal_time)
+
+    assert {:ok, lstat} = FileUtils.lstat(link, time: :local)
+    assert lstat.ctime == local_time
+    assert lstat.mtime == local_time
+    assert lstat.atime == local_time
+
+    assert {:ok, lstat} = FileUtils.lstat(link, time: :universal)
+    assert lstat.ctime == universal_time
+    assert lstat.mtime == universal_time
+    assert lstat.atime == universal_time
+
+    assert {:ok, lstat} = FileUtils.lstat(link, time: :posix)
+    assert lstat.ctime == posix_time
+    assert lstat.mtime == posix_time
+    assert lstat.atime == posix_time
+  end
+
+  test "error conditions in lstat/2", context do
+    workdir = context[:workdir]
+
+    file = Path.join(workdir, "file")
+    link = Path.join(workdir, "link")
+    missing = Path.join(workdir, "missing")
+
+    File.ln_s(file, link)
+
+    assert FileUtils.lstat(missing) == {:error, :enoent}
+    assert FileUtils.lstat(link, time: :fantasy) == {:error, :badarg}
+  end
+
 end
