@@ -16,6 +16,19 @@ defmodule FileUtilsTest do
   test "creating a tree of files", context do
     workdir = context[:workdir]
 
+    fox_path = Path.join(workdir, "fox")
+    the1_path = Path.join(fox_path, "the")
+    quick_path = Path.join(fox_path, "quick")
+    brown_path = Path.join(fox_path, "brown")
+    jumps_path = Path.join(workdir, "jumps")
+    over_path = Path.join(workdir, "over")
+    dog_path = Path.join(over_path, "dog")
+    the2_path = Path.join(dog_path, "the")
+    lazy_path = Path.join(dog_path, "lazy")
+
+    # Make sure we can clean up the working directory behind us.
+    on_exit(fn -> File.chmod(fox_path, 0o700) end)
+
     assert FileUtils.install_file_tree(workdir, [
       {"fox", 0o500, [
         {"the", 0o400, "article"},
@@ -30,16 +43,6 @@ defmodule FileUtilsTest do
         ]},
       ]},
     ]) == :ok
-
-    fox_path = Path.join(workdir, "fox")
-    the1_path = Path.join(fox_path, "the")
-    quick_path = Path.join(fox_path, "quick")
-    brown_path = Path.join(fox_path, "brown")
-    jumps_path = Path.join(workdir, "jumps")
-    over_path = Path.join(workdir, "over")
-    dog_path = Path.join(over_path, "dog")
-    the2_path = Path.join(dog_path, "the")
-    lazy_path = Path.join(dog_path, "lazy")
 
     assert File.dir?(fox_path)
     assert File.ls!(fox_path) == ["brown", "quick", "the"]
@@ -85,9 +88,6 @@ defmodule FileUtilsTest do
     assert File.read!(lazy_path) == "adjective"
     assert {:ok, stat} = File.stat(lazy_path)
     assert (stat.mode &&& 0o777) == 0o644
-
-    # Make sure we can clean up the working directory behind us.
-    File.chmod(fox_path, 0o700)
   end
 
   test "creating a file (or directory) twice results in error", context do
@@ -319,6 +319,192 @@ defmodule FileUtilsTest do
     assert_raise File.Error, "could not read file stats #{link}: bad argument", fn ->
       FileUtils.lstat!(link, time: :fantasy)
     end
+  end
+
+  test "walking a basic directory tree", context do
+    workdir = context[:workdir]
+
+    fox_path = Path.join(workdir, "fox")
+    the1_path = Path.join(fox_path, "the")
+    quick_path = Path.join(fox_path, "quick")
+    brown_path = Path.join(fox_path, "brown")
+    jumps_path = Path.join(workdir, "jumps")
+    over_path = Path.join(workdir, "over")
+    dog_path = Path.join(over_path, "dog")
+    the2_path = Path.join(dog_path, "the")
+    lazy_path = Path.join(dog_path, "lazy")
+
+    FileUtils.install_file_tree(workdir, [
+      {"fox", [
+        {"the", 0o400, "article"},
+        {"quick", "adjective"},
+        {"brown", "adjective"},
+      ]},
+      {"jumps", []},
+      {"over", [
+        {"dog", [
+          {"the", 0o400, "article"},
+          {"lazy", "adjective"},
+        ]},
+      ]},
+    ])
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir)
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir)   },
+      {fox_path,   File.stat!(fox_path)  },
+      {brown_path, File.stat!(brown_path)},
+      {quick_path, File.stat!(quick_path)},
+      {the1_path,  File.stat!(the1_path) },
+      {jumps_path, File.stat!(jumps_path)},
+      {over_path,  File.stat!(over_path) },
+      {dog_path,   File.stat!(dog_path)  },
+      {lazy_path,  File.stat!(lazy_path) },
+      {the2_path,  File.stat!(the2_path) },
+    ]
+  end
+
+  test "walking multiple directory trees", context do
+    workdir = context[:workdir]
+
+    fox_path = Path.join(workdir, "fox")
+    the1_path = Path.join(fox_path, "the")
+    quick_path = Path.join(fox_path, "quick")
+    brown_path = Path.join(fox_path, "brown")
+    jumps_path = Path.join(workdir, "jumps")
+    over_path = Path.join(workdir, "over")
+    dog_path = Path.join(over_path, "dog")
+    the2_path = Path.join(dog_path, "the")
+    lazy_path = Path.join(dog_path, "lazy")
+
+    FileUtils.install_file_tree(workdir, [
+      {"fox", [
+        {"the", 0o400, "article"},
+        {"quick", "adjective"},
+        {"brown", "adjective"},
+      ]},
+      {"jumps", []},
+      {"over", [
+        {"dog", [
+          {"the", 0o400, "article"},
+          {"lazy", "adjective"},
+        ]},
+      ]},
+    ])
+
+    assert {:ok, stream} = FileUtils.path_tree_walk([over_path, jumps_path, fox_path])
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {fox_path,   File.stat!(fox_path)  },
+      {brown_path, File.stat!(brown_path)},
+      {quick_path, File.stat!(quick_path)},
+      {the1_path,  File.stat!(the1_path) },
+      {jumps_path, File.stat!(jumps_path)},
+      {over_path,  File.stat!(over_path) },
+      {dog_path,   File.stat!(dog_path)  },
+      {lazy_path,  File.stat!(lazy_path) },
+      {the2_path,  File.stat!(the2_path) },
+    ]
+  end
+
+  test "walking a directory tree with :symlink_stat", context do
+    workdir = context[:workdir]
+
+    file_path = Path.join(workdir, "file")
+    link_path = Path.join(workdir, "link")
+
+    File.write!(file_path, "")
+    File.ln_s(file_path, link_path)
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir, symlink_stat: false)
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir)  },
+      {file_path,  File.stat!(file_path)},
+      {link_path,  File.stat!(link_path)},
+    ]
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir, symlink_stat: true)
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir)        },
+      {file_path,  File.stat!(file_path)      },
+      {link_path,  FileUtils.lstat!(link_path)},
+    ]
+  end
+
+  test "alternate time formats for path_tree_walk/2", context do
+    workdir = context[:workdir]
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir, time: :local)
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir, time: :local)},
+    ]
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir, time: :universal)
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir, time: :universal)},
+    ]
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir, time: :posix)
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir, time: :posix)},
+    ]
+  end
+
+  test "walking a tree with inaccessable direcotories", context do
+    workdir = context[:workdir]
+
+    fox_path = Path.join(workdir, "fox")
+    jumps_path = Path.join(workdir, "jumps")
+
+    # Make sure we can clean up the working directory behind us.
+    on_exit(fn -> File.chmod(fox_path, 0o700) end)
+
+    FileUtils.install_file_tree(workdir, [
+      {"fox", 0o000, [
+        {"quick", "adjective"},
+        {"brown", "adjective"},
+      ]},
+      {"jumps", []},
+    ])
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir)
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir)   },
+      {fox_path,   File.stat!(fox_path)  },
+      {jumps_path, File.stat!(jumps_path)},
+    ]
+  end
+
+  test "walking a tree with invalid files", context do
+    workdir = context[:workdir]
+
+    file_path = Path.join(workdir, "file")
+    link_path = Path.join(workdir, "link")
+
+    File.ln_s(file_path, link_path)
+
+    assert {:ok, stream} = FileUtils.path_tree_walk(workdir)
+    assert is_function(stream)
+
+    assert Enum.take(stream, 99) == [
+      {workdir,    File.stat!(workdir)   },
+    ]
+  end
+
+  test "handling of invalid path_tree_walk/2 options", context do
+    workdir = context[:workdir]
+
+    assert FileUtils.path_tree_walk(workdir, time: :mythical) == {:error, :badarg}
+    assert FileUtils.path_tree_walk(workdir, symlink_stat: 0) == {:error, :badarg}
   end
 
 end

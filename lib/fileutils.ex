@@ -3,6 +3,11 @@ defmodule FileUtils do
   @type posix :: :file.posix
   @type badarg :: {:error, :badarg}
 
+  defp validate_opt({:error, _reason} = error, _opt, _validate), do: error
+  defp validate_opt(opts, opt, validate) do
+    if validate.(opts[opt]), do: opts, else: {:error, :badarg}
+  end
+
   @doc """
   Create a tree of file / directory specifications under the given root. Each
   file / directory has a name and and optional permission (default permissions
@@ -134,6 +139,89 @@ defmodule FileUtils do
       {:ok, info}      -> info
       {:error, reason} ->
         raise File.Error, reason: reason, action: "read file stats", path: path
+    end
+  end
+
+  @doc """
+  Return a stream which walks one or more directory trees. The trees are walked
+  depth first, with the directory entries returned in sorted order. Each
+  directory entry is returned as a `{path, stat}` tuple, where the path is the
+  full path to the entry and the stat is a `File.Stat` struct.
+
+  The following option may be set:
+
+  *  `:symlink_stat`  - If set to `true` then symbolic links will return `stat`
+                        information about the link instead of the file object
+                        referred to by the link. The default is `false`.
+
+  *  `:time`          - Form of the time data returned in the `File.Stat`
+                        struct. This may be one of `:local`, `:universal`, or
+                        `:posix`. The default is `:local`.
+
+  If an error occurs while walking the tree (a file node is deleted, a symlink
+  is invalid, etc.) then the node with the problem will be skipped.
+  """
+  @type path_tree_walk_option :: {:symlink_stat, boolean} |
+                                 {:time, (:local | :universal | :posix)}
+  @spec path_tree_walk([Path.t] | Path.t, [path_tree_walk_option]) :: Enumerable.t
+  def path_tree_walk(rootdir, opts \\ [])
+      when (is_list(rootdir) or is_binary(rootdir)) and is_list(opts) do
+    default_opts = [
+      symlink_stat: false,
+      time: :local
+    ]
+    default_opts
+    |> Dict.merge(opts)
+    |> validate_opt(:symlink_stat, &is_boolean/1)
+    |> validate_opt(:time, &(&1 in [:local, :universal, :posix]))
+    |> tree_walk_opts_to_funcs
+    |> stream_for_tree_walk(rootdir)
+  end
+
+  defp tree_walk_opts_to_funcs({:error, _reason} = error), do: error
+  defp tree_walk_opts_to_funcs(opts) when is_list(opts) do
+    [
+      stat: stat_fn(opts[:symlink_stat], opts[:time])
+    ]
+  end
+
+  defp stat_fn(false, time_fmt), do: &File.stat(&1, time: time_fmt)
+  defp stat_fn(true, time_fmt),  do: &lstat(&1, time: time_fmt)
+
+  defp stream_for_tree_walk({:error, _reason} = error, _rootdir), do: error
+  defp stream_for_tree_walk(funcs, rootdirs) when is_list(rootdirs) do
+    {:ok, Stream.resource(
+      fn -> {Enum.sort(rootdirs), funcs} end,
+      &path_tree_walk_next/1,
+      fn _ -> nil end
+    )}
+  end
+  defp stream_for_tree_walk(funcs, rootdir), do: stream_for_tree_walk(funcs, [rootdir])
+
+  defp path_tree_walk_next({[], funcs}), do: {:halt, {[], funcs}}
+  defp path_tree_walk_next({[dir_fn | rest], funcs}) when is_function(dir_fn) do
+    {[], {dir_fn.() ++ rest, funcs}}
+  end
+  defp path_tree_walk_next({[path | rest], funcs}) do
+    case funcs[:stat].(path) do
+      {:ok, stat} ->
+        if File.dir?(path) do
+          {[{path, stat}], {[walk_to(path) | rest], funcs}}
+        else
+          {[{path, stat}], {rest, funcs}}
+        end
+      {:error, _reason} ->
+        {[], {rest, funcs}}
+    end
+  end
+
+  defp walk_to(path) do
+    fn ->
+      case File.ls(path) do
+        {:ok, filenames} when is_list(filenames) ->
+          filenames |> Enum.sort |> Enum.map(&Path.join(path, &1))
+        {:error, _reason} -> []
+      end
     end
   end
 
