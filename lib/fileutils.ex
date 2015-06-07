@@ -18,7 +18,7 @@ defmodule FileUtils do
 
   Example:
 
-      :ok = install(System.tmpdir, [
+      :ok = install_file_tree(System.tmpdir, [
         {"test-data", [
           {"data", <<0, 1, 2, 3, 4>>},
           {"read_only", 0o444, <<4, 3, 2, 1, 0>>},
