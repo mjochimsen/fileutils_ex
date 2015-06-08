@@ -32,16 +32,17 @@ defmodule FileUtils do
 
   Example:
 
-      :ok = install_file_tree(System.tmpdir, [
-        {"test-data", [
-          {"data", <<0, 1, 2, 3, 4>>},
-          {"read_only", 0o444, <<4, 3, 2, 1, 0>>},
-          {"no_access", 0o000, <<255, 255>>},
-          {"subdir", 0o555, [
-            {"more_data", "The quick brown fox..."}
-          ]}
-        ]}
-      ])
+      iex> FileUtils.install_file_tree(System.tmp_dir, [
+      ...>   {"test-data", [
+      ...>     {"data", <<0, 1, 2, 3, 4>>},
+      ...>     {"read_only", 0o444, <<4, 3, 2, 1, 0>>},
+      ...>     {"no_access", 0o000, <<255, 255>>},
+      ...>     {"subdir", 0o555, [
+      ...>       {"more_data", "The quick brown fox..."}
+      ...>     ]}
+      ...>   ]}
+      ...> ])
+      :ok
 
 
   If the function succeeds, `:ok` is returned. If it fails then `{:error,
