@@ -6,11 +6,11 @@ defmodule FileUtils.Mixfile do
       app: :fileutils,
       version: "0.1.0",
       name: "FileUtils",
-      source_url: "https://github.com/mjochimsen/fileutils_ex",
       elixir: "~> 1.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      deps: deps
+      deps: deps,
+      docs: docs
     ]
   end
 
@@ -38,4 +38,13 @@ defmodule FileUtils.Mixfile do
       {:earmark, "~> 0.1", only: :dev}
     ]
   end
+
+  defp docs do
+    [
+      main: FileUtils,
+      readme: "README.md",
+      source_url: "https://github.com/mjochimsen/fileutils_ex"
+    ]
+  end
+
 end
