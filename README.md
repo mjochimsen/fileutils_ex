@@ -15,7 +15,7 @@ Add `FileUtils` to your project's dependencies in `mix.exs`:
 
     defp deps do
       [
-        {:fileutils, github: "mjochimsen/fileutils_ex", tag: "v0.1.0"}
+        {:fileutils, github: "mjochimsen/fileutils_ex", tag: "v0.1.1"}
       ]
     end
 

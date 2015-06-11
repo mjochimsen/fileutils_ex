@@ -4,7 +4,7 @@ defmodule FileUtils.Mixfile do
   def project do
     [
       app: :fileutils,
-      version: "0.1.0",
+      version: "0.1.1",
       name: "FileUtils",
       elixir: "~> 1.0",
       build_embedded: Mix.env == :prod,
